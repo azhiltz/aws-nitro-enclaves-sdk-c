@@ -139,6 +139,67 @@ int aws_attestation_request(
 }
 
 /**
+ * Generates attestation data with user data and nounce specified.
+ *
+ * @param[in]   allocator        The allocator to use.
+ * @param[in]   public_key       The public key used for attestation.
+ * @param[in]   user_data        The user data used for attestation.
+ * @param[in]   user_data_len    The length of the user_data.
+ * @param[in]   user_nounce      The Nounce used for attestation.
+ * @param[in]   user_nounce_len  The length of user_nounce.
+ * @param[out]  attestation_doc  The public key used for attestation.
+ *
+ * @return                       Returns the error code. If SUCCESS, then attestation_doc is populated.
+ */
+int aws_attestation_request_with_user_data_nounce(
+    struct aws_allocator *allocator,
+    struct aws_rsa_keypair *keypair,
+    unsigned char* user_data,
+    int user_data_len,
+    unsigned char* user_nounce, 
+    int user_nounce_len,
+    struct aws_byte_buf *attestion_doc) {
+    
+    AWS_PRECONDITION(keypair != NULL && keypair->key_impl != NULL);
+
+    if (allocator == NULL) {
+        allocator = aws_nitro_enclaves_get_allocator();
+    }
+
+    int nsm_fd = nsm_lib_init();
+    if (nsm_fd < 0) {
+        return AWS_OP_ERR;
+    }
+
+    CBB out;
+    if (CBB_init(&out, 0) != 1 || EVP_marshal_public_key(&out, keypair->key_impl) != 1) {
+        CBB_cleanup(&out);
+        return AWS_OP_ERR;
+    }
+
+    /* Get the attestation document. */
+    uint8_t att_doc[NSM_MAX_ATTESTATION_DOC_SIZE];
+    uint32_t att_doc_len = NSM_MAX_ATTESTATION_DOC_SIZE;
+    int rc = nsm_get_attestation_doc(nsm_fd, user_data, user_data_len, user_nounce, user_nounce_len, CBB_data(&out), CBB_len(&out), att_doc, &att_doc_len);
+    if (rc) {
+        CBB_cleanup(&out);
+        nsm_lib_exit(nsm_fd);
+        return AWS_OP_ERR;
+    }
+    CBB_cleanup(&out);
+
+    struct aws_byte_cursor cursor = aws_byte_cursor_from_array(att_doc, att_doc_len);
+    if (AWS_OP_SUCCESS != aws_byte_buf_init_copy_from_cursor(attestion_doc, allocator, cursor)) {
+        nsm_lib_exit(nsm_fd);
+        return AWS_OP_ERR;
+    }
+
+    nsm_lib_exit(nsm_fd);
+
+    return AWS_OP_SUCCESS;
+}
+    
+/**
  * Decrypts the provided ciphertext data using the specified private key.
  * Uses the cipher text allocator.
  *

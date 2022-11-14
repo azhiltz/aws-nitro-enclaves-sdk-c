@@ -1,5 +1,43 @@
 # AWS Nitro Enclaves SDK for C
 
+Fork from [aws nitro enclave sdk](https://github.com/aws/aws-nitro-enclaves-sdk-c.git ).
+ADD:
+
+1. generate attestation document with use data and nounce 
+
+```code
+/**
+ * Generates attestation data with user data and nounce specified.
+ *
+ * @param[in]   allocator        The allocator to use.
+ * @param[in]   public_key       The public key used for attestation.
+ * @param[in]   user_data        The user data used for attestation.
+ * @param[in]   user_data_len    The length of the user_data.
+ * @param[in]   user_nounce      The Nounce used for attestation.
+ * @param[in]   user_nounce_len  The length of user_nounce.
+ * @param[out]  attestation_doc  The public key used for attestation.
+ *
+ * @return                       Returns the error code. If SUCCESS, then attestation_doc is populated.
+ */
+AWS_NITRO_ENCLAVES_API
+int aws_attestation_request_with_user_data_nounce(
+    struct aws_allocator *allocator,
+    struct aws_rsa_keypair *keypair,
+    unsigned char* user_data,
+    int user_data_len,
+    unsigned char* user_nounce, 
+    int user_nounce_len,
+    struct aws_byte_buf *attestion_doc);
+```
+2. Add pybind of attestation interface, source code in pybind/, and the python class is pyattestation, usage:
+
+```code 
+import pyattestation
+atter = pyattestation.attestation()
+atter.init_key_pair()
+atter.request_attestation_doc(...)
+```
+
 ## License
 
 This project is licensed under the Apache-2.0 License.
