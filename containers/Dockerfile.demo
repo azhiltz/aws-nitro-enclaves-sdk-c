@@ -1,0 +1,26 @@
+# // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# // SPDX-License-Identifier: MIT-0
+
+## build kms-enclave-cli from this docker file https://github.com/aws/aws-nitro-enclaves-sdk-c/blob/main/containers/Dockerfile.al2
+FROM enclave_builder as builder
+
+
+COPY . aws-nitro-enclaves-sdk-c
+RUN rm -rf aws-nitro-enclaves-sdk-c/build
+RUN cmake3 -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -GNinja \
+    -Dpybind11_DIR=/usr/local/lib/python3.7/site-packages/pybind11/share/cmake/pybind11 \
+	-S aws-nitro-enclaves-sdk-c -B aws-nitro-enclaves-sdk-c/build
+RUN cmake3 --build aws-nitro-enclaves-sdk-c/build --parallel $(nproc) --target install
+RUN cmake3 --build aws-nitro-enclaves-sdk-c/build --parallel $(nproc) --target docs
+
+# Create a workshop base image with libnsm.so and kmstool_enclave_cli
+FROM public.ecr.aws/amazonlinux/amazonlinux:2 as enclave_sdk_base
+RUN yum install python3 -y
+WORKDIR /app
+COPY --from=builder /usr/lib64/libnsm.so /usr/lib64/libnsm.so /app/
+COPY --from=builder /usr/bin/kmstool_enclave_cli /app/
+COPY --from=builder /usr/bin/attestation_demo /app/
+COPY --from=builder /usr/lib/pyattestation.cpython-37m-x86_64-linux-gnu.so  /app/
+RUN ldconfig /app
+RUN export PYTHONPATH=/app:$PYTHONPATH
+CMD ["ldconfig \/app"]

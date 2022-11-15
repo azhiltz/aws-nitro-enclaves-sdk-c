@@ -2,6 +2,7 @@
 
 #include <aws/nitro_enclaves/attestation.h>
 #include <aws/nitro_enclaves/nitro_enclaves.h>
+#include <iostream>
 
 attestation_cpp_wrapper::attestation_cpp_wrapper() {
     key_pair_ = (uintptr_t)nullptr;
@@ -10,7 +11,7 @@ attestation_cpp_wrapper::attestation_cpp_wrapper() {
     /* Initialize the SDK */
     aws_nitro_enclaves_library_init(NULL);
     /* Initialize the entropy pool: this is relevant for TLS */
-    //AWS_ASSERT(aws_nitro_enclaves_library_seed_entropy(1024) == AWS_OP_SUCCESS);
+    AWS_ASSERT(aws_nitro_enclaves_library_seed_entropy(1024) == AWS_OP_SUCCESS);
 }
 
 attestation_cpp_wrapper::~attestation_cpp_wrapper() {
@@ -39,14 +40,14 @@ bool attestation_cpp_wrapper::init_key_pair() {
     return true;
 }
 
-static void copy_aws_buffer_2_vector(struct aws_byte_buf* aws_buffer, std::vector<uint8_t>& dst) {
+static void copy_aws_buffer_2_vector(struct aws_byte_buf* aws_buffer, std::vector<char>& dst) {
     dst.insert(dst.end(), aws_buffer->buffer, aws_buffer->buffer+aws_buffer->len);
 }
 
 bool attestation_cpp_wrapper::request_attestation_doc(
-    std::vector<uint8_t>& user_data, 
-    std::vector<uint8_t>& user_nounce, 
-    std::vector<uint8_t>& attestation_doc) {
+    std::vector<char>& user_data, 
+    std::vector<char>& user_nounce, 
+    std::vector<char>& attestation_doc) {
     //not init
     if (key_pair_ == (uintptr_t)nullptr) {
         return false;
@@ -59,8 +60,8 @@ bool attestation_cpp_wrapper::request_attestation_doc(
     
     int ret = aws_attestation_request_with_user_data_nounce(
         allocator, key_pair, 
-        &user_data[0], user_data.size(), 
-        &user_nounce[0], user_data.size(), 
+        (uint8_t*)&user_data[0], user_data.size(), 
+        (uint8_t*)&user_nounce[0], user_data.size(), 
         &byte_buf );
     
     if(ret != AWS_OP_SUCCESS) {
@@ -81,8 +82,8 @@ bool attestation_cpp_wrapper::request_attestation_doc(
 }
 
 bool attestation_cpp_wrapper::decrypt_data_with_private_key(
-    std::vector<uint8_t>& ciphertext, 
-    std::vector<uint8_t>& plaintext) {
+    std::vector<char>& ciphertext, 
+    std::vector<char>& plaintext) {
     
     //not init
     if (key_pair_ == (uintptr_t)nullptr) {
@@ -115,4 +116,78 @@ FINI:
     }
     
     return ret == AWS_OP_SUCCESS;
+}
+
+std::string attestation_cpp_wrapper::request_attestation_default_doc() {
+    //not init
+    std::cout << "LOG: enter " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl; 
+    std::string r;
+    if (key_pair_ == (uintptr_t)nullptr) {
+        return r;
+    }
+    
+    struct aws_allocator* allocator = (struct aws_allocator*)(allocator_);
+    struct aws_rsa_keypair* key_pair = (struct aws_rsa_keypair*)(key_pair_);
+    
+    struct aws_recipient* recipient = aws_recipient_new(allocator);
+    
+    std::cout << "LOG: begin to get doc " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    int ret = aws_attestation_request(
+        allocator, key_pair, 
+        &recipient->attestation_document );
+    
+    
+    std::cout << "LOG: get over " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    if(ret != AWS_OP_SUCCESS) {
+        aws_recipient_destroy(recipient);
+        return r;
+    }
+    /* json output */
+    struct aws_string* recepint_json = aws_recipient_to_json(recipient);
+    
+    std::cout << "LOG: begin to assin result " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    //copy data from buffer
+    r.assign(recepint_json->bytes, recepint_json->bytes + recepint_json->len);
+    
+    aws_string_destroy(recepint_json);
+    aws_recipient_destroy(recipient);
+    
+    return r;
+}
+
+std::vector<char> attestation_cpp_wrapper::request_attestation_doc_str(
+            std::string& user_data, 
+            std::string& user_nounce
+            ) {
+    std::cout << "LOG: enter " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;            
+    std::vector<char> user_data_vec, user_nounce_vec;
+    user_data_vec.resize(user_data.size());
+    user_nounce_vec.resize(user_nounce.size());
+    user_data_vec.assign(user_data.begin(), user_data.end());
+    user_nounce_vec.assign(user_nounce.begin(), user_nounce.end());
+    
+    std::cout << "LOG: begin to get doc " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    
+    //std::string r;
+    std::vector<char> att_doc;
+    if ( !request_attestation_doc(user_data_vec, user_nounce_vec, att_doc) ) {
+        
+        //.assign(att_doc.begin(), att_doc.end());
+        std::cout << "LOG: get doc wrong " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    }
+    std::cout << "LOG: get over " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    return att_doc;
+}
+
+std::string attestation_cpp_wrapper::decrypt_data_with_private_key_str(std::string& ciphertext) {
+    std::vector<char> plaintext_vec, ciphertext_vec;
+    plaintext_vec.resize(ciphertext.size());
+    plaintext_vec.assign(ciphertext.begin(), ciphertext.end());
+    
+    std::string r;
+    if (decrypt_data_with_private_key(plaintext_vec, ciphertext_vec)) {
+        r.assign(ciphertext_vec.begin(), ciphertext_vec.end());
+    }
+    
+    return r;
 }

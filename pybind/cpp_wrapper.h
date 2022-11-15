@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 class attestation_cpp_wrapper {
         
@@ -14,13 +15,22 @@ class attestation_cpp_wrapper {
         bool init_key_pair();
         
         bool request_attestation_doc(
-            std::vector<uint8_t>& user_data, 
-            std::vector<uint8_t>& user_nounce, 
-            std::vector<uint8_t>& attestation_doc);
+            std::vector<char>& user_data, 
+            std::vector<char>& user_nounce, 
+            std::vector<char>& attestation_doc);
+            
+        std::vector<char> request_attestation_doc_str(
+            std::string& user_data, 
+            std::string& user_nounce
+            );
+        
+        std::string request_attestation_default_doc();
         
         bool decrypt_data_with_private_key(
-            std::vector<uint8_t>& ciphertext, 
-            std::vector<uint8_t>& plaintext);
+            std::vector<char>& ciphertext, 
+            std::vector<char>& plaintext);
+        
+        std::string decrypt_data_with_private_key_str(std::string& ciphertext);
         
     private:
         /* pointer to  key_pair */
