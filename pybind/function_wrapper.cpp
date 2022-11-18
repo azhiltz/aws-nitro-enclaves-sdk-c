@@ -17,5 +17,7 @@ PYBIND11_MODULE( pyattestation, m ){
         .def( "init_key_pair", &attestation_cpp_wrapper::init_key_pair )
         .def( "request_attestation_doc", &attestation_cpp_wrapper::request_attestation_doc_str )
         .def("request_attestation_default_doc", &attestation_cpp_wrapper::request_attestation_default_doc)
+        .def("get_public_key", &attestation_cpp_wrapper::get_public_key)
+        .def("get_private_key", &attestation_cpp_wrapper::get_private_key)
         .def( "decrypt_data_with_private_key", &attestation_cpp_wrapper::decrypt_data_with_private_key_str );
 }

@@ -6,6 +6,7 @@
 #include <aws/nitro_enclaves/attestation.h>
 #include <aws/nitro_enclaves/kms.h>
 #include <aws/nitro_enclaves/nitro_enclaves.h>
+#include <aws/common/encoding.h>
 
 /* Low level crypto backend interfaces */
 #include <openssl/bn.h>
@@ -256,5 +257,57 @@ int aws_attestation_rsa_decrypt(
         return AWS_OP_ERR;
     }
 
+    return AWS_OP_SUCCESS;
+}
+
+#define LOG_FUNC(msg) \
+    fprintf(stderr, "LOG: %s at %s %d\n", (msg), __FUNCTION__, __LINE__)
+    
+int aws_attestation_rsa_get_public_key(
+    struct aws_rsa_keypair *key_pair,
+    struct aws_byte_buf *publickey) {
+    
+    if ( !key_pair || !key_pair->key_impl || !publickey) {
+        return AWS_OP_ERR;
+    }
+    
+    LOG_FUNC("begin to get publickey");
+    
+    CBB out;
+    if (CBB_init(&out, 0) != 1 || EVP_marshal_public_key(&out, (const EVP_PKEY*)key_pair->key_impl) != 1) {
+        CBB_cleanup(&out);
+        return AWS_OP_ERR;
+    }
+    
+    LOG_FUNC("get cursor");
+    struct aws_byte_cursor cursor = aws_byte_cursor_from_array(CBB_data(&out), CBB_len(&out));
+    LOG_FUNC("base64 encode");
+    aws_base64_encode(&cursor, publickey);
+    
+    LOG_FUNC("clean up");
+    CBB_cleanup(&out);
+    
+    return AWS_OP_SUCCESS;
+}
+
+int aws_attestation_rsa_get_private_key(
+    struct aws_rsa_keypair *key_pair,
+    struct aws_byte_buf *privatekey) {
+    
+    if ( !key_pair || !key_pair->key_impl || !privatekey) {
+        return AWS_OP_ERR;
+    }
+    
+    CBB out;
+    if (CBB_init(&out, 0) != 1 || EVP_marshal_private_key(&out, (const EVP_PKEY*)key_pair->key_impl) != 1) {
+        CBB_cleanup(&out);
+        return AWS_OP_ERR;
+    }
+    
+    struct aws_byte_cursor cursor = aws_byte_cursor_from_array(CBB_data(&out), CBB_len(&out));
+    aws_base64_encode(&cursor, privatekey);
+    
+    CBB_cleanup(&out);
+    
     return AWS_OP_SUCCESS;
 }

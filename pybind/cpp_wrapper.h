@@ -19,7 +19,7 @@ class attestation_cpp_wrapper {
             std::vector<char>& user_nounce, 
             std::vector<char>& attestation_doc);
             
-        std::vector<char> request_attestation_doc_str(
+        std::string request_attestation_doc_str(
             std::string& user_data, 
             std::string& user_nounce
             );
@@ -31,6 +31,10 @@ class attestation_cpp_wrapper {
             std::vector<char>& plaintext);
         
         std::string decrypt_data_with_private_key_str(std::string& ciphertext);
+        
+        std::string get_public_key();
+        
+        std::string get_private_key();
         
     private:
         /* pointer to  key_pair */

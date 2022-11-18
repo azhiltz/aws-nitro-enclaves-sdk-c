@@ -107,6 +107,16 @@ int aws_attestation_rsa_decrypt(
     struct aws_byte_buf *ciphertext,
     struct aws_byte_buf *plaintext);
 
+AWS_NITRO_ENCLAVES_API 
+int aws_attestation_rsa_get_public_key(
+    struct aws_rsa_keypair *keypair,
+    struct aws_byte_buf *publickey);
+
+AWS_NITRO_ENCLAVES_API 
+int aws_attestation_rsa_get_private_key(
+    struct aws_rsa_keypair *keypair,
+    struct aws_byte_buf *privatekey);
+    
 AWS_EXTERN_C_END
 
 #endif /* AWS_NITRO_ENCLAVES_ATTESTATION_H */

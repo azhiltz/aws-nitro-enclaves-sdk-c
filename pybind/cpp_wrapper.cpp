@@ -2,6 +2,7 @@
 
 #include <aws/nitro_enclaves/attestation.h>
 #include <aws/nitro_enclaves/nitro_enclaves.h>
+#include <aws/common/encoding.h>
 #include <iostream>
 
 attestation_cpp_wrapper::attestation_cpp_wrapper() {
@@ -155,39 +156,137 @@ std::string attestation_cpp_wrapper::request_attestation_default_doc() {
     return r;
 }
 
-std::vector<char> attestation_cpp_wrapper::request_attestation_doc_str(
+std::string attestation_cpp_wrapper::request_attestation_doc_str(
             std::string& user_data, 
             std::string& user_nounce
             ) {
-    std::cout << "LOG: enter " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;            
-    std::vector<char> user_data_vec, user_nounce_vec;
-    user_data_vec.resize(user_data.size());
-    user_nounce_vec.resize(user_nounce.size());
-    user_data_vec.assign(user_data.begin(), user_data.end());
-    user_nounce_vec.assign(user_nounce.begin(), user_nounce.end());
+    //not init
+    std::cout << "LOG: enter " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl; 
+    std::string r;
+    if (key_pair_ == (uintptr_t)nullptr) {
+        return r;
+    }
+    
+    struct aws_allocator* allocator = (struct aws_allocator*)(allocator_);
+    struct aws_rsa_keypair* key_pair = (struct aws_rsa_keypair*)(key_pair_);
+    
+    struct aws_recipient* recipient = aws_recipient_new(allocator);
     
     std::cout << "LOG: begin to get doc " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    int ret = aws_attestation_request_with_user_data_nounce(
+        allocator, key_pair, 
+        (uint8_t*)&user_data[0], user_data.size(), 
+        (uint8_t*)&user_nounce[0], user_data.size(), 
+        &recipient->attestation_document );
     
-    //std::string r;
-    std::vector<char> att_doc;
-    if ( !request_attestation_doc(user_data_vec, user_nounce_vec, att_doc) ) {
-        
-        //.assign(att_doc.begin(), att_doc.end());
-        std::cout << "LOG: get doc wrong " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
-    }
     std::cout << "LOG: get over " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
-    return att_doc;
+    if(ret != AWS_OP_SUCCESS) {
+        aws_recipient_destroy(recipient);
+        return r;
+    }
+    /* json output */
+    struct aws_string* recepint_json = aws_recipient_to_json(recipient);
+    
+    std::cout << "LOG: begin to assin result " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    //copy data from buffer
+    r.assign(recepint_json->bytes, recepint_json->bytes + recepint_json->len);
+    
+    aws_string_destroy(recepint_json);
+    aws_recipient_destroy(recipient);
+    
+    return r;
 }
 
 std::string attestation_cpp_wrapper::decrypt_data_with_private_key_str(std::string& ciphertext) {
-    std::vector<char> plaintext_vec, ciphertext_vec;
-    plaintext_vec.resize(ciphertext.size());
-    plaintext_vec.assign(ciphertext.begin(), ciphertext.end());
-    
+     //not init
     std::string r;
-    if (decrypt_data_with_private_key(plaintext_vec, ciphertext_vec)) {
-        r.assign(ciphertext_vec.begin(), ciphertext_vec.end());
+    if (key_pair_ == (uintptr_t)nullptr) {
+        return r;
     }
     
+    struct aws_allocator* allocator = (struct aws_allocator*)(allocator_);
+    struct aws_rsa_keypair* key_pair = (struct aws_rsa_keypair*)(key_pair_);
+    
+    struct aws_byte_buf plain_buf, cipher_buf, plain_buf_b64;
+    aws_byte_buf_init(&cipher_buf, allocator, ciphertext.size());
+    aws_byte_buf_init(&plain_buf, allocator, ciphertext.size());
+    aws_byte_buf_init(&plain_buf_b64, allocator, ciphertext.size());
+    
+    //memcpy cipher
+    std::cout << "LOG: begin to base64 decode " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    struct aws_byte_cursor cursor = aws_byte_cursor_from_array(ciphertext.c_str(), ciphertext.size()); //, ciphertext.length());
+    aws_base64_decode(&cursor, &cipher_buf);
+    
+    std::cout << "LOG: begin to decrypt " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    std::cout <<" LOG: cipher is " << cipher_buf.len <<" " << __FUNCTION__ <<" line: " << __LINE__ << std::endl; 
+    int ret = aws_attestation_rsa_decrypt( allocator, key_pair, &cipher_buf, &plain_buf);
+    if (ret != AWS_OP_SUCCESS) {
+        goto FINI;
+    }
+    
+    std::cout << "LOG: begin to base64 encode " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    cursor = aws_byte_cursor_from_buf(&plain_buf);
+    aws_base64_encode(&cursor, &plain_buf_b64);
+    
+    //copy_aws_buffer_2_vector(&cipher_buf_b64, plaintext);
+    std::cout << "LOG: assign result " << __FUNCTION__ <<" line: " << __LINE__ <<std::endl;
+    r.assign(plain_buf_b64.buffer, plain_buf_b64.buffer+plain_buf_b64.len);
+    
+FINI:
+    if (aws_byte_buf_is_valid(&cipher_buf)) {
+        aws_byte_buf_clean_up_secure(&cipher_buf);
+    }
+    if (aws_byte_buf_is_valid(&plain_buf)) {
+        aws_byte_buf_clean_up_secure(&plain_buf);
+    }
+     if (aws_byte_buf_is_valid(&plain_buf_b64)) {
+        aws_byte_buf_clean_up_secure(&plain_buf_b64);
+    }
+    
+    
+    return r;
+}
+
+std::string attestation_cpp_wrapper::get_public_key() {
+    std::string r;
+    if (key_pair_ == (uintptr_t)nullptr) {
+        return r;
+    }
+    struct aws_rsa_keypair* key_pair = (struct aws_rsa_keypair*)(key_pair_);
+    struct aws_allocator* allocator = (struct aws_allocator*)(allocator_);
+    
+    struct aws_byte_buf buffer_b64;
+    aws_byte_buf_init(&buffer_b64, allocator, 4096*2);
+    
+    aws_attestation_rsa_get_public_key(key_pair, &buffer_b64);
+    
+    r.assign(buffer_b64.buffer, buffer_b64.buffer + buffer_b64.len);
+    
+    if(aws_byte_buf_is_valid(&buffer_b64)) {
+        aws_byte_buf_clean_up_secure(&buffer_b64);
+    }
+
+    return r;
+}
+
+std::string attestation_cpp_wrapper::get_private_key() {
+     std::string r;
+    if (key_pair_ == (uintptr_t)nullptr) {
+        return r;
+    }
+    struct aws_rsa_keypair* key_pair = (struct aws_rsa_keypair*)(key_pair_);
+    struct aws_allocator* allocator = (struct aws_allocator*)(allocator_);
+    
+    struct aws_byte_buf buffer_b64;
+    aws_byte_buf_init(&buffer_b64, allocator, 4096*2);
+    
+    aws_attestation_rsa_get_private_key(key_pair, &buffer_b64);
+    
+    r.assign(buffer_b64.buffer, buffer_b64.buffer + buffer_b64.len);
+    
+    if(aws_byte_buf_is_valid(&buffer_b64)) {
+        aws_byte_buf_clean_up_secure(&buffer_b64);
+    }
+
     return r;
 }

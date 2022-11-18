@@ -1,5 +1,6 @@
 import cbor2 as cbor
 import base64
+import json 
 
 def attestation_cbor2json(cbor_data):
     attestation_dict = {}
@@ -11,23 +12,25 @@ def attestation_cbor2json(cbor_data):
     pcrs = []
     for k, v in pcrs_data.items():
         pcr = {}
-        pcr[k] = base64.b64encode(v)
+        pcr[k] = (base64.b64encode(v)).decode()
         pcrs.append(pcr)
     attestation_dict["pcrs"] = pcrs
     attestation_dict["certificate"] = []
     if cbor_data["certificate"]:
-        attestation_dict["certificate"] = base64.b64encode(cbor_data["certificate"])
+        attestation_dict["certificate"] = (base64.b64encode(cbor_data["certificate"])).decode()
     
     cabundle = []
     for i in cbor_data["cabundle"]:
-        cabundle.append(base64.b64encode(i))
+        t = base64.b64encode(i)
+        cabundle.append(t.decode())
     attestation_dict["cabundle"] = cabundle
     if cbor_data["public_key"]:
-        attestation_dict["public_key"] = base64.b64encode(cbor_data["public_key"])
+        t = base64.b64encode(cbor_data["public_key"])
+        attestation_dict["public_key"] = t.decode()
     if cbor_data["user_data"]:
-        attestation_dict["user_data"] = base64.b64encode(cbor_data["user_data"])
+        attestation_dict["user_data"] = (base64.b64encode(cbor_data["user_data"])).decode()
     if  cbor_data["nonce"]:
-        attestation_dict["nonce"] = base64.b64encode(cbor_data["nonce"])
+        attestation_dict["nonce"] = (base64.b64encode(cbor_data["nonce"])).decode()
 
     return attestation_dict
 
@@ -44,7 +47,7 @@ def get_all_items(base64_content):
 
     signature = base64.b64encode(cbor_all[3])
 
-    return signature_alg, attest_doc, signature
+    return signature_alg, attest_doc, signature.decode()
 
 def print_kv(cbor_list):
     for I in cbor_list:
@@ -66,6 +69,6 @@ if __name__ == "__main__":
 
     print(sig_alg)
     print(att_doc)
+    print(json.dumps(att_doc))
     print(sig)
-
 
